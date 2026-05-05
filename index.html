@@ -5157,12 +5157,12 @@
     async function deleteAnalysis(jobId, kind, safeName) {
       const displayName = safeName.replace(/&#39;/g, "'").replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"');
       const msg = currentLang === 'en'
-        ? 'Delete "' + displayName + '"?\n\nThe analysis will be removed from your list. The Excel export in storage stays intact.'
-        : '"' + displayName + '" löschen?\n\nDer Eintrag verschwindet aus Ihrer Liste. Der Excel-Export im Speicher bleibt erhalten.';
+        ? 'Permanently delete "' + displayName + '"?\n\nThis cannot be undone.'
+        : '"' + displayName + '" endgültig löschen?\n\nDieser Vorgang kann nicht rückgängig gemacht werden.';
       if (!confirm(msg)) return;
       const table = kind === 'angebot' ? 'analyses' : 'ab_analyses';
       const { error } = await sb.from(table)
-        .update({ status: 'deleted' })
+        .delete()
         .eq('user_id', currentUser.id)
         .eq('job_id', jobId);
       if (error) {
