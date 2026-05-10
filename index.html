@@ -3511,8 +3511,14 @@
     .analysis-params-header svg { color: var(--text-muted, #9CA3AF); }
     .analysis-params-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      grid-template-columns: repeat(3, 1fr);
       gap: 1rem;
+    }
+    @media (max-width: 768px) {
+      .analysis-params-grid { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 480px) {
+      .analysis-params-grid { grid-template-columns: 1fr; }
     }
     @media (max-width: 768px) {
       .analysis-params-grid { grid-template-columns: 1fr; }
@@ -4160,24 +4166,25 @@
                   <option value="kunststoff_pa" data-price="2350" data-unit="€/t">Polyamid (PA6)</option>
                   <option value="sonstige">Sonstige (manuell eingeben)</option>
                 </select>
-                <div class="param-hint">Optional. Für die Bewertung von Materialzuschlägen gegen den aktuellen Marktpreis.</div>
-                <div id="param-marktpreis-field" style="display:none; margin-top: 0.5rem;">
-                  <label for="param-marktpreis" style="font-size:0.82rem; font-weight:600; margin-bottom:0.25rem; display:block;">Aktueller Marktpreis</label>
-                  <div class="param-zielpreis-group">
-                    <input type="text" id="param-marktpreis" inputmode="decimal" placeholder="z.B. 9.420">
-                    <span id="param-marktpreis-unit" style="font-size:0.82rem; color:var(--subtle); padding: 0 8px; align-self:center;">€/t</span>
-                  </div>
-                  <div class="param-hint" id="param-marktpreis-source"></div>
+                <div class="param-hint">Optional. Materialzuschläge gegen Marktpreis bewerten.</div>
+              </div>
+
+              <div class="param-field" id="param-marktpreis-field" style="display:none;">
+                <label for="param-marktpreis">Marktpreis</label>
+                <div class="param-zielpreis-group">
+                  <input type="text" id="param-marktpreis" inputmode="decimal" placeholder="z.B. 380">
+                  <span id="param-marktpreis-unit" style="font-size:0.82rem; color:var(--subtle); padding: 0 8px; align-self:center;">€/t</span>
                 </div>
+                <div class="param-hint" id="param-marktpreis-source"></div>
               </div>
 
               <div class="param-field">
                 <label>Sourcing-Strategie</label>
-                <label class="param-checkbox-label" style="display:flex; align-items:center; gap:8px; cursor:pointer; margin-top:4px;">
-                  <input type="checkbox" id="param-sourcing" style="width:16px; height:16px; accent-color: var(--accent);">
-                  <span style="font-size:0.92rem;">Dual-Source und Split-Vergabe analysieren</span>
+                <label class="param-checkbox-label" style="display:flex; align-items:flex-start; gap:8px; cursor:pointer; margin-top:4px;">
+                  <input type="checkbox" id="param-sourcing" style="width:16px; height:16px; margin-top:2px; accent-color: var(--accent);">
+                  <span style="font-size:0.88rem;">Dual-Source und Split-Vergabe analysieren</span>
                 </label>
-                <div class="param-hint">Optional. Empfiehlt optimale Volumenaufteilung auf mehrere Lieferanten.</div>
+                <div class="param-hint">Optional. Volumenaufteilung auf mehrere Lieferanten.</div>
               </div>
             </div>
           </div>
