@@ -4148,6 +4148,8 @@
                 <label for="param-materialklasse">Materialklasse</label>
                 <select id="param-materialklasse" onchange="onMaterialklasseChange()">
                   <option value="">Keine (nicht relevant)</option>
+                  <option value="gusseisen_schrott" data-price="380" data-unit="€/t">Stahlschrott (Gießerei)</option>
+                  <option value="gusseisen_roheisen" data-price="185" data-unit="€/t">Roheisen (Gießerei)</option>
                   <option value="kupfer" data-price="9420" data-unit="€/t">Kupfer (DEL)</option>
                   <option value="aluminium" data-price="2380" data-unit="€/t">Aluminium (LME)</option>
                   <option value="stahl_hrc" data-price="620" data-unit="€/t">Stahl Warmband (HRC)</option>
@@ -8288,6 +8290,14 @@
         tabs.push({
           name: isEN ? 'Issues' : 'Offene Punkte',
           html: issuesHtml
+        });
+      }
+
+      // Sourcing-Strategie (optional)
+      if (sections.sourcingStrategy && sections.sourcingStrategy.length > 0) {
+        tabs.push({
+          name: isEN ? 'Sourcing Strategy' : 'Sourcing-Strategie',
+          html: arrayToTable(sections.sourcingStrategy, 'sourcing')
         });
       }
 
