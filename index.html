@@ -4161,15 +4161,14 @@
                   <option value="sonstige">Sonstige (manuell eingeben)</option>
                 </select>
                 <div class="param-hint">Optional. Für die Bewertung von Materialzuschlägen gegen den aktuellen Marktpreis.</div>
-              </div>
-
-              <div class="param-field" id="param-marktpreis-field" style="display:none;">
-                <label for="param-marktpreis">Aktueller Marktpreis</label>
-                <div class="param-zielpreis-group">
-                  <input type="text" id="param-marktpreis" inputmode="decimal" placeholder="z.B. 9.420">
-                  <span id="param-marktpreis-unit" style="font-size:0.82rem; color:var(--subtle); padding: 0 8px; align-self:center;">€/t</span>
+                <div id="param-marktpreis-field" style="display:none; margin-top: 0.5rem;">
+                  <label for="param-marktpreis" style="font-size:0.82rem; font-weight:600; margin-bottom:0.25rem; display:block;">Aktueller Marktpreis</label>
+                  <div class="param-zielpreis-group">
+                    <input type="text" id="param-marktpreis" inputmode="decimal" placeholder="z.B. 9.420">
+                    <span id="param-marktpreis-unit" style="font-size:0.82rem; color:var(--subtle); padding: 0 8px; align-self:center;">€/t</span>
+                  </div>
+                  <div class="param-hint" id="param-marktpreis-source"></div>
                 </div>
-                <div class="param-hint" id="param-marktpreis-source"></div>
               </div>
 
               <div class="param-field">
