@@ -7758,6 +7758,13 @@
             return;
           }
 
+          // Bei €/Los-Zielpreis: nur Gesamtkosten-Zeilen (lot/ambiguous) markieren,
+          // NICHT einzelne Stückpreise gegen ein Gesamtbudget vergleichen.
+          if (targetPriceMode === 'lot' && unitByLabel === 'stk') {
+            for (let c = 1; c < tr.cells.length; c++) clearCell(tr.cells[c]);
+            return;
+          }
+
           // Zahlenwerte aller Angebotsspalten sammeln
           const cellNums = [];
           for (let c = 1; c < tr.cells.length; c++) {
