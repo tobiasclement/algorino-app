@@ -4143,6 +4143,41 @@
                 </select>
                 <div class="param-hint" data-i18n="app.params.presetHint">Bestimmt die Gewichtung im Scoring (Sheet 4).</div>
               </div>
+
+              <div class="param-field">
+                <label for="param-materialklasse">Materialklasse</label>
+                <select id="param-materialklasse" onchange="onMaterialklasseChange()">
+                  <option value="">Keine (nicht relevant)</option>
+                  <option value="kupfer" data-price="9420" data-unit="€/t">Kupfer (DEL)</option>
+                  <option value="aluminium" data-price="2380" data-unit="€/t">Aluminium (LME)</option>
+                  <option value="stahl_hrc" data-price="620" data-unit="€/t">Stahl Warmband (HRC)</option>
+                  <option value="stahl_crc" data-price="720" data-unit="€/t">Stahl Kaltband (CRC)</option>
+                  <option value="messing" data-price="7850" data-unit="€/t">Messing (CuZn)</option>
+                  <option value="bronze" data-price="11200" data-unit="€/t">Bronze (CuSn)</option>
+                  <option value="kunststoff_pp" data-price="1180" data-unit="€/t">Polypropylen (PP)</option>
+                  <option value="kunststoff_pa" data-price="2350" data-unit="€/t">Polyamid (PA6)</option>
+                  <option value="sonstige">Sonstige (manuell eingeben)</option>
+                </select>
+                <div class="param-hint">Optional. Für die Bewertung von Materialzuschlägen gegen den aktuellen Marktpreis.</div>
+              </div>
+
+              <div class="param-field" id="param-marktpreis-field" style="display:none;">
+                <label for="param-marktpreis">Aktueller Marktpreis</label>
+                <div class="param-zielpreis-group">
+                  <input type="text" id="param-marktpreis" inputmode="decimal" placeholder="z.B. 9.420">
+                  <span id="param-marktpreis-unit" style="font-size:0.82rem; color:var(--subtle); padding: 0 8px; align-self:center;">€/t</span>
+                </div>
+                <div class="param-hint" id="param-marktpreis-source"></div>
+              </div>
+
+              <div class="param-field">
+                <label>Sourcing-Strategie</label>
+                <label class="param-checkbox-label" style="display:flex; align-items:center; gap:8px; cursor:pointer; margin-top:4px;">
+                  <input type="checkbox" id="param-sourcing" style="width:16px; height:16px; accent-color: var(--accent);">
+                  <span style="font-size:0.92rem;">Dual-Source und Split-Vergabe analysieren</span>
+                </label>
+                <div class="param-hint">Optional. Empfiehlt optimale Volumenaufteilung auf mehrere Lieferanten.</div>
+              </div>
             </div>
           </div>
 
@@ -4749,6 +4784,7 @@
         showLoggedInUI();
         loadHistory();
         loadAbHistory();
+        loadMarketPrices();
       } else {
         showAppScreen('login');
       }
@@ -4920,12 +4956,16 @@
     }
 
     async function markAnalysisDone(jobId) {
-      if (!currentUser) return;
-      await sb
+      if (!currentUser) return null;
+      // Status wird bereits von n8n auf 'done' gesetzt,
+      // hier nur result_data abholen
+      const { data, error } = await sb
         .from('analyses')
-        .update({ status: 'done' })
+        .select('result_data')
         .eq('user_id', currentUser.id)
-        .eq('job_id', jobId);
+        .eq('job_id', jobId)
+        .maybeSingle();
+      return (!error && data) ? data.result_data : null;
     }
 
     // ============================================
@@ -5551,28 +5591,11 @@
           : '"' + projectName + '" wird geladen...';
 
       try {
-        const res = await fetch(N8N_DOWNLOAD_URL + '?jobId=' + encodeURIComponent(jobId));
-        const data = await res.json();
-
-        if (data.status !== 'done' || !data.downloadUrl) {
-          throw new Error(currentLang === 'en'
-            ? 'Analysis no longer available in storage'
-            : 'Auswertung nicht mehr im Speicher verfügbar');
-        }
-
-        const filename = (currentLang === 'en' ? 'Quote_Analysis' : 'Angebotsauswertung') +
-          '_' + projectName.replace(/[^a-zA-Z0-9äöüÄÖÜß_-]/g, '_') + '.xlsx';
-
-        scoringState = null;
-        scoringUserChanged = false;
-        uploadedFiles = [];
-        currentAnalysisJobId = jobId;
-        pendingScoringPriorities = null;
-
-        // Persistierten Scoring-State + Zielpreis mitladen (best-effort, blockiert nicht)
+        // Persistierten State + result mitladen
+        let storedResult = null;
         try {
           const { data: row, error: rowErr } = await sb.from('analyses')
-            .select('scoring_state, target_price, target_price_mode, project_name, buyer_name, created_at')
+            .select('scoring_state, target_price, target_price_mode, project_name, buyer_name, created_at, result_data')
             .eq('user_id', currentUser.id)
             .eq('job_id', jobId)
             .maybeSingle();
@@ -5586,10 +5609,10 @@
             if (row.target_price_mode === 'stk' || row.target_price_mode === 'lot') {
               pendingTargetPriceMode = row.target_price_mode;
             }
-            // Meta-Felder
             currentProjectName = row.project_name || projectName || '';
             currentBuyerName = row.buyer_name || '';
             currentCreatedAt = row.created_at || null;
+            storedResult = row.result_data || null;
           } else {
             currentProjectName = projectName || '';
             currentBuyerName = '';
@@ -5602,7 +5625,37 @@
           currentCreatedAt = null;
         }
 
-        showResult(data.downloadUrl, projectName, filename, true);
+        scoringState = null;
+        scoringUserChanged = false;
+        uploadedFiles = [];
+        currentAnalysisJobId = jobId;
+        pendingScoringPriorities = null;
+
+        // Versuche Excel von S3 zu laden
+        let s3Success = false;
+        try {
+          const res = await fetch(N8N_DOWNLOAD_URL + '?jobId=' + encodeURIComponent(jobId));
+          const data = await res.json();
+
+          if (data.status === 'done' && data.downloadUrl) {
+            const filename = (currentLang === 'en' ? 'Quote_Analysis' : 'Angebotsauswertung') +
+              '_' + projectName.replace(/[^a-zA-Z0-9äöüÄÖÜß_-]/g, '_') + '.xlsx';
+            showResult(data.downloadUrl, projectName, filename, true);
+            s3Success = true;
+          }
+        } catch (e) {
+          console.warn('S3 download failed, trying Supabase fallback:', e.message);
+        }
+
+        // Fallback: Aus gespeichertem Claude-Result rendern
+        if (!s3Success && storedResult) {
+          console.log('Using stored Claude result as fallback');
+          renderAnalysisFromJSON(storedResult, projectName);
+        } else if (!s3Success) {
+          throw new Error(currentLang === 'en'
+            ? 'Analysis no longer available'
+            : 'Auswertung nicht mehr verfügbar');
+        }
 
         document.getElementById('result-sub').textContent =
           currentLang === 'en'
@@ -6139,6 +6192,21 @@
         }
         formData.append('Gewichtungspreset', params.gewichtungspreset);
 
+        // Marktdaten
+        if (params.materialklasse) {
+          formData.append('Materialklasse', params.materialklasse);
+          formData.append('MaterialLabel', params.materialLabel);
+          if (params.marktpreis !== null) {
+            formData.append('Marktpreis', String(params.marktpreis));
+            formData.append('MarktpreisUnit', params.marktpreisUnit);
+          }
+        }
+
+        // Sourcing-Strategie
+        if (params.sourcingStrategie) {
+          formData.append('SourcingStrategie', 'true');
+        }
+
         if (offerGroups.length > 0) {
           const gm = {};
           offerGroups.forEach((g, gi) => {
@@ -6225,8 +6293,11 @@
         currentCreatedAt = new Date().toISOString();
         showResult(result, projectName, filename);
 
-        // Mark analysis as done and refresh history
-        await markAnalysisDone(jobId);
+        // Mark analysis as done and fetch stored Claude result
+        const analysisResult = await markAnalysisDone(jobId);
+        if (analysisResult) {
+          console.log('Claude result stored in Supabase:', Object.keys(analysisResult));
+        }
         historyLoaded = false;
         loadHistory();
 
@@ -6965,15 +7036,87 @@
       return isNaN(n) ? null : n;
     }
 
+    function onMaterialklasseChange() {
+      const sel = document.getElementById('param-materialklasse');
+      const field = document.getElementById('param-marktpreis-field');
+      const input = document.getElementById('param-marktpreis');
+      const unit = document.getElementById('param-marktpreis-unit');
+      const source = document.getElementById('param-marktpreis-source');
+
+      if (!sel.value || sel.value === '') {
+        field.style.display = 'none';
+        input.value = '';
+        return;
+      }
+
+      field.style.display = 'block';
+
+      if (sel.value === 'sonstige') {
+        input.value = '';
+        input.placeholder = 'Preis eingeben';
+        unit.textContent = '€/t';
+        source.textContent = 'Bitte aktuellen Marktpreis und Einheit manuell eingeben.';
+        return;
+      }
+
+      const opt = sel.options[sel.selectedIndex];
+      const price = opt.getAttribute('data-price');
+      const u = opt.getAttribute('data-unit') || '€/t';
+
+      if (price) {
+        input.value = Number(price).toLocaleString('de-DE');
+        unit.textContent = u;
+        source.textContent = 'Referenzwert. Bitte mit aktuellem Marktpreis abgleichen.';
+      }
+    }
+
+    // Marktpreise aus Supabase laden (überschreibt die Defaults im Dropdown)
+    async function loadMarketPrices() {
+      try {
+        const { data, error } = await sb.from('market_prices')
+          .select('material, label, price, unit, source')
+          .order('material');
+
+        if (error || !data || data.length === 0) return;
+
+        const sel = document.getElementById('param-materialklasse');
+        if (!sel) return;
+
+        data.forEach(row => {
+          const opt = sel.querySelector('option[value="' + row.material + '"]');
+          if (opt) {
+            opt.setAttribute('data-price', String(row.price));
+            opt.setAttribute('data-unit', row.unit);
+            opt.textContent = row.label + ' (' + Number(row.price).toLocaleString('de-DE') + ' ' + row.unit + ')';
+          }
+        });
+      } catch (e) {
+        console.warn('Market prices not loaded:', e.message);
+      }
+    }
+
     function readAnalysisParams() {
       const zp = parseDeNumber(document.getElementById('param-zielpreis')?.value);
       const vm = parseDeNumber(document.getElementById('param-vergleichsmenge')?.value);
       const preset = document.getElementById('param-preset')?.value || 'standard';
+
+      const materialklasse = document.getElementById('param-materialklasse')?.value || '';
+      const marktpreis = parseDeNumber(document.getElementById('param-marktpreis')?.value);
+      const marktpreisUnit = document.getElementById('param-marktpreis-unit')?.textContent || '€/t';
+      const materialLabel = materialklasse ? document.getElementById('param-materialklasse')?.options[document.getElementById('param-materialklasse').selectedIndex]?.textContent : '';
+
+      const sourcing = document.getElementById('param-sourcing')?.checked || false;
+
       return {
         zielpreis: zp,
         zielpreisModus: zp !== null ? paramZielpreisMode : '',
         vergleichsmenge: vm,
         gewichtungspreset: preset,
+        materialklasse: materialklasse,
+        materialLabel: materialLabel,
+        marktpreis: marktpreis,
+        marktpreisUnit: marktpreisUnit,
+        sourcingStrategie: sourcing,
       };
     }
 
@@ -8046,6 +8189,151 @@
     }
 
     function switchTab(idx) {
+
+    // ============================================
+    // FALLBACK RENDERER: Supabase result_data → HTML
+    // Wird verwendet wenn S3-URL abgelaufen ist
+    // aber result_data in Supabase gespeichert ist
+    //
+    // Format von result_data:
+    // { raw: "...", sections: { comparison: [[]], execSummary: [[]], ... }, savedAt: "..." }
+    // Jede Section ist ein 2D-Array (Zeile 0 = Header)
+    // ============================================
+    function renderAnalysisFromJSON(resultData, projectName) {
+      const appC = document.querySelector('.app-container');
+      appC.classList.remove('has-dashboard');
+      appC.classList.add('has-results');
+
+      document.getElementById('processing-card').style.display = 'none';
+      document.getElementById('result-card').style.display = 'block';
+
+      const viewer = document.getElementById('excel-viewer');
+      const tabsContainer = document.getElementById('viewer-tabs');
+      const panelsContainer = document.getElementById('viewer-panels');
+
+      tabsContainer.innerHTML = '';
+      panelsContainer.innerHTML = '';
+
+      const isEN = currentLang === 'en';
+      const sections = resultData.sections || {};
+      const tabs = [];
+
+      // Helper: 2D-Array zu HTML-Tabelle
+      function arrayToTable(data, type) {
+        if (!data || data.length === 0) return '<p style="padding:20px;color:var(--subtle);">Keine Daten</p>';
+        // Use existing renderSheetContent if possible
+        try {
+          return renderSheetContent(data, type || 'data');
+        } catch (e) {
+          // Fallback: simple table
+          let html = '<table class="viewer-table"><thead><tr>';
+          if (data[0]) data[0].forEach(h => { html += '<th>' + escapeHtml(String(h)) + '</th>'; });
+          html += '</tr></thead><tbody>';
+          for (let r = 1; r < data.length; r++) {
+            html += '<tr>';
+            (data[r] || []).forEach(c => { html += '<td>' + escapeHtml(String(c)) + '</td>'; });
+            html += '</tr>';
+          }
+          html += '</tbody></table>';
+          return html;
+        }
+      }
+
+      // Tabs aufbauen basierend auf vorhandenen Sections
+      if (sections.comparison && sections.comparison.length > 0) {
+        tabs.push({
+          name: isEN ? 'Comparison' : 'Vergleichstabelle',
+          html: arrayToTable(sections.comparison, 'comparison')
+        });
+      }
+
+      if (sections.execSummary && sections.execSummary.length > 0) {
+        tabs.push({
+          name: 'Executive Summary',
+          html: arrayToTable(sections.execSummary, 'exec')
+        });
+      }
+
+      if (sections.volumeAnalysis && sections.volumeAnalysis.length > 0) {
+        tabs.push({
+          name: isEN ? 'Volume Analysis' : 'Mengenanalyse',
+          html: arrayToTable(sections.volumeAnalysis, 'volume')
+        });
+      }
+
+      if (sections.scoring && sections.scoring.length > 0) {
+        tabs.push({
+          name: 'Scoring',
+          html: arrayToTable(sections.scoring, 'scoring')
+        });
+      }
+
+      if (sections.arguments && sections.arguments.length > 0) {
+        tabs.push({
+          name: isEN ? 'Negotiation' : 'Verhandlung',
+          html: arrayToTable(sections.arguments, 'args')
+        });
+      }
+
+      if (sections.issues && sections.issues.length > 0) {
+        let issuesHtml = '<ul class="issues-list" style="padding:20px;">';
+        sections.issues.forEach(issue => {
+          if (typeof issue === 'string' && issue.trim()) {
+            issuesHtml += '<li>' + escapeHtml(issue) + '</li>';
+          } else if (Array.isArray(issue) && issue[0]) {
+            issuesHtml += '<li>' + escapeHtml(String(issue[0])) + '</li>';
+          }
+        });
+        issuesHtml += '</ul>';
+        tabs.push({
+          name: isEN ? 'Issues' : 'Offene Punkte',
+          html: issuesHtml
+        });
+      }
+
+      // Fallback: Rohdaten
+      if (tabs.length === 0 && resultData.raw) {
+        tabs.push({
+          name: 'Rohdaten',
+          html: '<pre style="padding:20px;overflow-x:auto;font-size:0.85rem;white-space:pre-wrap;">' + escapeHtml(resultData.raw) + '</pre>'
+        });
+      }
+
+      // Tabs rendern
+      tabs.forEach((tab, idx) => {
+        const tabEl = document.createElement('button');
+        tabEl.className = 'viewer-tab' + (idx === 0 ? ' active' : '');
+        tabEl.textContent = tab.name;
+        tabEl.onclick = () => {
+          document.querySelectorAll('#viewer-tabs .viewer-tab').forEach((t, i) => t.classList.toggle('active', i === idx));
+          document.querySelectorAll('#viewer-panels .viewer-panel').forEach((p, i) => p.classList.toggle('active', i === idx));
+        };
+        tabsContainer.appendChild(tabEl);
+
+        const panel = document.createElement('div');
+        panel.className = 'viewer-panel' + (idx === 0 ? ' active' : '');
+        panel.innerHTML = tab.html;
+        panelsContainer.appendChild(panel);
+      });
+
+      viewer.style.display = 'block';
+      showActionBar('angebot');
+      renderMetaBar();
+
+      // Download-Button ausblenden (kein Excel verfügbar)
+      const dlBtn = document.getElementById('btn-download');
+      if (dlBtn) dlBtn.style.display = 'none';
+
+      // Hinweis
+      const resultSub = document.getElementById('result-sub');
+      if (resultSub) {
+        resultSub.textContent = isEN
+          ? 'Loaded from saved analysis (Excel download expired)'
+          : 'Aus gespeicherter Analyse geladen (Excel-Download abgelaufen)';
+      }
+    }
+
+    // ============================================
       document.querySelectorAll('#viewer-tabs .viewer-tab').forEach((t, i) => t.classList.toggle('active', i === idx));
       document.querySelectorAll('#viewer-panels .viewer-panel').forEach((p, i) => p.classList.toggle('active', i === idx));
       document.querySelectorAll('#fs-tabs .viewer-tab').forEach((t, i) => t.classList.toggle('active', i === idx));
