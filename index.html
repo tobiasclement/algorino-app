@@ -3511,7 +3511,7 @@
     .analysis-params-header svg { color: var(--text-muted, #9CA3AF); }
     .analysis-params-grid {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
       gap: 1rem;
     }
     @media (max-width: 768px) {
@@ -5996,7 +5996,7 @@
         document.getElementById('step-upload')?.classList.add('done');
         document.getElementById('step-analyze')?.classList.add('active');
 
-        const maxPolls = 30, pollDelay = 10000;
+        const maxPolls = 60, pollDelay = 10000;
         let polls = 0;
         const result = await new Promise((resolve, reject) => {
           const poll = async () => {
@@ -6073,15 +6073,15 @@
           activeTextEn: 'AI reading ' + pdfCount + ' quote(s)…',
           doneTextEn: '✓ All quotes captured' },
         { id: 'step-analyze', status: 'status-analyze', duration: null,
-          activeText: 'Preise, Konditionen & Risiken werden verglichen…',
+          activeText: 'Preise, Konditionen & Risiken werden verglichen (ca. 5 Min.)…',
           doneText: '✓ Analyse abgeschlossen',
-          activeTextEn: 'Comparing prices, terms & risks…',
+          activeTextEn: 'Comparing prices, terms & risks (approx. 5 min)…',
           doneTextEn: '✓ Analysis complete',
           substeps: [
             { id: 'sub-compare', delay: 0 },
-            { id: 'sub-target',  delay: 20000 },
-            { id: 'sub-args',    delay: 45000 },
-            { id: 'sub-scoring', delay: 70000 },
+            { id: 'sub-target',  delay: 60000 },
+            { id: 'sub-args',    delay: 150000 },
+            { id: 'sub-scoring', delay: 240000 },
           ]
         },
         { id: 'step-excel',   status: 'status-excel',  duration: null,
@@ -6241,7 +6241,7 @@
         // ============================================
         // PHASE 2: Polling bis Ergebnis fertig
         // ============================================
-        const maxPolls = 30;
+        const maxPolls = 60;
         const pollDelay = 10000;
         let polls = 0;
 
@@ -6403,6 +6403,24 @@
 
     function extractNumber(val) {
       if (!val) return null;
+      val = String(val).trim();
+
+      // Rechenweg-Zellen enthalten "=" Zeichen (z.B. "25021466UB: €448,97 × 350 = ... = €722.024,00")
+      // Problem: Teilenummern wie "25021466UB" beginnen mit Ziffern und würden als Zahl erkannt.
+      // Lösung: Bei "=" im Text das letzte Segment nach dem letzten "=" nehmen (= Endergebnis).
+      if (val.includes('=')) {
+        const segments = val.split('=');
+        for (let i = segments.length - 1; i >= 0; i--) {
+          const seg = segments[i].trim();
+          if (!seg) continue;
+          const cleaned = seg.replace(/[.]/g, '').replace(',', '.');
+          const m = cleaned.match(/[\d]+[.]?[\d]*/);
+          if (m) return parseFloat(m[0]);
+        }
+        return null;
+      }
+
+      // Standard: erste Zahl extrahieren (funktioniert für "€943.190,50 (4 Teile)" etc.)
       const m = val.replace(/[.]/g, '').replace(',', '.').match(/[\d]+[.]?[\d]*/);
       return m ? parseFloat(m[0]) : null;
     }
@@ -9641,7 +9659,7 @@
         // JS runtime
         'js.maxFiles': 'Maximal {n} Dateien erlaubt.',
         'js.noCredits': 'Keine Analysen mehr verfügbar. Bitte kontaktieren Sie <a href="mailto:tobias@thetacklecompany.de">tobias@thetacklecompany.de</a> für weitere Credits.',
-        'js.timeout': 'Zeitüberschreitung – die Analyse hat länger als 5 Minuten gedauert',
+        'js.timeout': 'Zeitüberschreitung – die Analyse hat länger als 10 Minuten gedauert',
         'js.resultMsg': 'Die Auswertung für "{name}" mit {count} Angebot(en) ist fertig.',
         'js.errorMsg': 'Fehler: {msg}. Bitte versuchen Sie es erneut.',
         'js.defaultProject': 'Projekt',
@@ -9846,7 +9864,7 @@
         // JS runtime
         'js.maxFiles': 'Maximum {n} files allowed.',
         'js.noCredits': 'No analyses remaining. Please contact <a href="mailto:tobias@thetacklecompany.de">tobias@thetacklecompany.de</a> for more credits.',
-        'js.timeout': 'Timeout – analysis took longer than 5 minutes',
+        'js.timeout': 'Timeout – analysis took longer than 10 minutes',
         'js.resultMsg': 'Analysis for "{name}" with {count} quote(s) is complete.',
         'js.errorMsg': 'Error: {msg}. Please try again.',
         'js.defaultProject': 'Project',
