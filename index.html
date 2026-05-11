@@ -8235,6 +8235,28 @@
     }
 
     function switchTab(idx) {
+      document.querySelectorAll('#viewer-tabs .viewer-tab').forEach((t, i) => t.classList.toggle('active', i === idx));
+      document.querySelectorAll('#viewer-panels .viewer-panel').forEach((p, i) => p.classList.toggle('active', i === idx));
+      document.querySelectorAll('#fs-tabs .viewer-tab').forEach((t, i) => t.classList.toggle('active', i === idx));
+
+      if (viewerData) {
+        const sheet = viewerData.Sheets[viewerData.SheetNames[idx]];
+        const data = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+        updateSheetInfo(idx, data);
+        if (document.getElementById('viewer-fullscreen').classList.contains('active')) {
+          updateFullscreenPanel(idx);
+        }
+      }
+      updateTargetPriceVisibility();
+      // Nach Tab-Wechsel neu rendern
+      if (targetPriceValue !== null) setTimeout(applyTargetPriceToDOM, 30);
+    }
+
+    function updateSheetInfo(idx, data) {
+      const rows = data.length;
+      const cols = data.length > 0 ? Math.max(...data.map(r => r.length)) : 0;
+      document.getElementById('sheet-info').textContent = rows + ' × ' + cols;
+    }
 
     // ============================================
     // FALLBACK RENDERER: Supabase result_data → HTML
@@ -8385,30 +8407,6 @@
           ? 'Loaded from saved analysis (Excel download expired)'
           : 'Aus gespeicherter Analyse geladen (Excel-Download abgelaufen)';
       }
-    }
-
-    // ============================================
-      document.querySelectorAll('#viewer-tabs .viewer-tab').forEach((t, i) => t.classList.toggle('active', i === idx));
-      document.querySelectorAll('#viewer-panels .viewer-panel').forEach((p, i) => p.classList.toggle('active', i === idx));
-      document.querySelectorAll('#fs-tabs .viewer-tab').forEach((t, i) => t.classList.toggle('active', i === idx));
-
-      if (viewerData) {
-        const sheet = viewerData.Sheets[viewerData.SheetNames[idx]];
-        const data = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
-        updateSheetInfo(idx, data);
-        if (document.getElementById('viewer-fullscreen').classList.contains('active')) {
-          updateFullscreenPanel(idx);
-        }
-      }
-      updateTargetPriceVisibility();
-      // Nach Tab-Wechsel neu rendern → Zellen-Markierung neu anwenden
-      if (targetPriceValue !== null) setTimeout(applyTargetPriceToDOM, 30);
-    }
-
-    function updateSheetInfo(idx, data) {
-      const rows = data.length;
-      const cols = data.length > 0 ? Math.max(...data.map(r => r.length)) : 0;
-      document.getElementById('sheet-info').textContent = rows + ' × ' + cols;
     }
 
     // ============================================
