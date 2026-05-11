@@ -8308,13 +8308,7 @@
       }
 
       // Tabs aufbauen basierend auf vorhandenen Sections
-      if (sections.comparison && sections.comparison.length > 0) {
-        tabs.push({
-          name: isEN ? 'Comparison' : 'Vergleichstabelle',
-          html: arrayToTable(sections.comparison, 'comparison')
-        });
-      }
-
+      // Reihenfolge: Exec Summary → Vergleichstabelle → Losgrößen → Scoring → Verhandlung → Issues → Sourcing
       if (sections.execSummary && sections.execSummary.length > 0) {
         tabs.push({
           name: 'Executive Summary',
@@ -8322,9 +8316,16 @@
         });
       }
 
+      if (sections.comparison && sections.comparison.length > 0) {
+        tabs.push({
+          name: isEN ? 'Comparison' : 'Vergleichstabelle',
+          html: arrayToTable(sections.comparison, 'comparison')
+        });
+      }
+
       if (sections.volumeAnalysis && sections.volumeAnalysis.length > 0) {
         tabs.push({
-          name: isEN ? 'Volume Analysis' : 'Mengenanalyse',
+          name: isEN ? 'Volume Analysis' : 'Losgrößen-Analyse',
           html: arrayToTable(sections.volumeAnalysis, 'volume')
         });
       }
@@ -8338,23 +8339,46 @@
 
       if (sections.arguments && sections.arguments.length > 0) {
         tabs.push({
-          name: isEN ? 'Negotiation' : 'Verhandlung',
-          html: arrayToTable(sections.arguments, 'args')
+          name: isEN ? 'Negotiation Arguments' : 'Verhandlungsargumente',
+          html: arrayToTable(sections.arguments, 'arguments')
         });
       }
 
       if (sections.issues && sections.issues.length > 0) {
-        let issuesHtml = '<ul class="issues-list" style="padding:20px;">';
+        // Issues mit farbigen Badges rendern (wie im Excel-Pfad)
+        let issuesHtml = '<div class="issues-list" style="padding:16px; display:flex; flex-direction:column; gap:8px;">';
         sections.issues.forEach(issue => {
-          if (typeof issue === 'string' && issue.trim()) {
-            issuesHtml += '<li>' + escapeHtml(issue) + '</li>';
-          } else if (Array.isArray(issue) && issue[0]) {
-            issuesHtml += '<li>' + escapeHtml(String(issue[0])) + '</li>';
+          let text = '';
+          if (typeof issue === 'string') text = issue.trim();
+          else if (Array.isArray(issue) && issue[0]) text = String(issue[0]).trim();
+          if (!text) return;
+
+          // Badge-Typ aus [TAG] extrahieren
+          const tagMatch = text.match(/^\[([A-ZÄÖÜ]+)\]\s*/);
+          let tag = '', body = text;
+          if (tagMatch) {
+            tag = tagMatch[1];
+            body = text.substring(tagMatch[0].length);
           }
+
+          let badgeColor = 'var(--subtle)';
+          let badgeBg = 'var(--bg-secondary)';
+          let borderColor = 'var(--border-color)';
+          if (tag === 'FEHLEND') { badgeColor = '#991B1B'; badgeBg = '#FEF2F2'; borderColor = '#FECACA'; }
+          else if (tag === 'UNKLAR') { badgeColor = '#92400E'; badgeBg = '#FFFBEB'; borderColor = '#FDE68A'; }
+          else if (tag === 'NACHFRAGEN') { badgeColor = '#065F46'; badgeBg = '#F0FDF4'; borderColor = '#BBF7D0'; }
+          else if (tag === 'RISIKO') { badgeColor = '#7C2D12'; badgeBg = '#FFF7ED'; borderColor = '#FED7AA'; }
+
+          issuesHtml += '<div style="display:flex; align-items:flex-start; gap:10px; padding:10px 14px; background:' + badgeBg + '; border:1px solid ' + borderColor + '; border-radius:8px; border-left:3px solid ' + badgeColor + ';">';
+          if (tag) {
+            issuesHtml += '<span style="font-size:0.7rem; font-weight:700; color:' + badgeColor + '; background:' + borderColor + '; padding:2px 8px; border-radius:4px; white-space:nowrap; margin-top:1px;">' + escapeHtml(tag) + '</span>';
+          }
+          issuesHtml += '<span style="font-size:0.88rem; line-height:1.5;">' + escapeHtml(body) + '</span>';
+          issuesHtml += '</div>';
         });
-        issuesHtml += '</ul>';
+        issuesHtml += '</div>';
         tabs.push({
-          name: isEN ? 'Issues' : 'Offene Punkte',
+          name: isEN ? 'Open Issues' : 'Offene Punkte',
           html: issuesHtml
         });
       }
