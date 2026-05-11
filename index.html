@@ -5649,10 +5649,20 @@
           const data = await res.json();
 
           if (data.status === 'done' && data.downloadUrl) {
-            const filename = (currentLang === 'en' ? 'Quote_Analysis' : 'Angebotsauswertung') +
-              '_' + projectName.replace(/[^a-zA-Z0-9äöüÄÖÜß_-]/g, '_') + '.xlsx';
-            showResult(data.downloadUrl, projectName, filename, true);
-            s3Success = true;
+            // Prüfe ob die S3-URL noch gültig ist (HEAD request)
+            try {
+              const headCheck = await fetch(data.downloadUrl, { method: 'HEAD' });
+              if (headCheck.ok) {
+                const filename = (currentLang === 'en' ? 'Quote_Analysis' : 'Angebotsauswertung') +
+                  '_' + projectName.replace(/[^a-zA-Z0-9äöüÄÖÜß_-]/g, '_') + '.xlsx';
+                showResult(data.downloadUrl, projectName, filename, true);
+                s3Success = true;
+              } else {
+                console.warn('S3 URL expired (HTTP ' + headCheck.status + '), trying Supabase fallback');
+              }
+            } catch (headErr) {
+              console.warn('S3 URL check failed, trying Supabase fallback:', headErr.message);
+            }
           }
         } catch (e) {
           console.warn('S3 download failed, trying Supabase fallback:', e.message);
